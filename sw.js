@@ -1,5 +1,5 @@
 // Mola service worker: sunucudan gelen push'u bildirim olarak gösterir.
-const CACHE = 'mola-v6';
+const CACHE = 'mola-v8';
 const ASSETS = ['./', 'index.html', 'style.css', 'app.js', 'manifest.webmanifest', 'icons/icon-192.png'];
 
 self.addEventListener('install', (event) => {
@@ -20,6 +20,8 @@ self.addEventListener('fetch', (event) => {
   event.respondWith(
     fetch(event.request)
       .then((res) => {
+        // Site geçici olarak yoksa (404 vb.) önbellekteki çalışan sürümü göster, hatayı saklama
+        if (!res.ok) return caches.match(event.request).then((cached) => cached || res);
         const copy = res.clone();
         caches.open(CACHE).then((c) => c.put(event.request, copy)).catch(() => {});
         return res;
