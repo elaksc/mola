@@ -1,5 +1,5 @@
 // Mola service worker: sunucudan gelen push'u bildirim olarak gösterir.
-const CACHE = 'mola-v8';
+const CACHE = 'mola-v9';
 const ASSETS = ['./', 'index.html', 'style.css', 'app.js', 'manifest.webmanifest', 'icons/icon-192.png'];
 
 self.addEventListener('install', (event) => {

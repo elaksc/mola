@@ -192,13 +192,15 @@
     <ul class="schedule" id="schedule"></ul>
     <p class="small">Saatleri değiştirmek için GitHub'da <code>config.json</code> dosyasını düzenle.</p>
 
-    <div id="custom-sync" hidden>
-      <h3>Hedef hatırlatmaları</h3>
-      <p class="small" id="custom-sync-msg"></p>
-      <textarea id="custom-snippet" readonly rows="4"></textarea>
-      <button class="pill pill-ghost" id="copy-snippet">Satırı kopyala</button>
-      <span class="small" id="snippet-state"></span>
+    <h3>Hedef bildirimleri</h3>
+    <p class="small" id="gh-state"></p>
+    <div id="gh-form">
+      <label class="field"><span>GitHub erişim anahtarı</span>
+        <input type="password" id="gh-token" placeholder="github_pat_…" autocomplete="off" autocapitalize="off" spellcheck="false"></label>
+      <button class="pill pill-dark" id="gh-save" style="margin-top:10px">Bağlan</button>
     </div>
+    <button class="pill pill-ghost" id="gh-sync" hidden>Şimdi eşitle</button>
+    <button class="link-danger" id="gh-remove" hidden>GitHub bağlantısını kaldır</button>
 
     <button class="link-danger" id="btn-reset">Bildirim aboneliğini sıfırla</button>
   </dialog>

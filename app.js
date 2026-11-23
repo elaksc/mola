@@ -141,7 +141,9 @@
     const have = new Set((config.custom || []).map((c) => c.id + ':' + (c.hours || []).join(',')));
     const pending = customs.filter((g) => g.remind != null && !have.has(g.id + ':' + g.remind));
     $('sync-banner').hidden = !pending.length;
-    if (pending.length) $('sync-banner').textContent = `${pending.map((g) => g.emoji + ' ' + g.name).join(', ')} hatırlatması henüz çalışmıyor. Açmak için dokun.`;
+    if (pending.length) $('sync-banner').textContent = ghToken()
+      ? `${pending.map((g) => g.emoji + ' ' + g.name).join(', ')} bildirimi eşitlenmedi. Tekrar denemek için dokun.`
+      : `${pending.map((g) => g.emoji + ' ' + g.name).join(', ')} bildirimi henüz kurulmadı. Kurmak için dokun.`;
   }
 
   function renderHeader() {
@@ -322,7 +324,7 @@
     $('f-target').value = editing ? editing.target : 20;
     $('f-unit').value = editing ? editing.unit : 'sayfa';
     $('f-step').value = editing ? editing.step : 5;
-    $('f-remind').value = editing && editing.remind != null ? String(editing.remind) : '';
+    $('f-remind').value = editing ? (editing.remind != null ? String(editing.remind) : '') : '20';
     $('goal-delete').hidden = !editing;
     paintEditor();
     openSheet('goal-editor');
@@ -346,35 +348,101 @@
     customs = editing ? customs.map((x) => (x.id === g.id ? g : x)) : [...customs, g];
     saveCustoms(); $('goal-editor').close(); render();
     toast(editing ? 'Hedef güncellendi' : `${g.emoji} ${g.name} eklendi`, false);
+    syncCustoms(true);
   });
   $('goal-delete').addEventListener('click', () => {
     if (!editing || !confirm(`"${editing.name}" silinsin mi?`)) return;
     customs = customs.filter((g) => g.id !== editing.id); saveCustoms();
     $('goal-editor').close(); render();
+    syncCustoms(true);
   });
 
   // bildirim satırı (config.json için)
-  function renderSnippet() {
-    const withRemind = customs.filter((g) => g.remind != null);
-    const want = withRemind.map((g) => ({
+  // ---------- hedef bildirimlerini GitHub'a otomatik yaz ----------
+  const GH_KEY = 'mola.gh';
+  const repo = (() => {
+    const owner = location.hostname.endsWith('.github.io') ? location.hostname.split('.')[0] : null;
+    const name = location.pathname.split('/').filter(Boolean)[0];
+    return owner && name ? { owner, name } : null;
+  })();
+  const ghToken = () => { try { return localStorage.getItem(GH_KEY) || ''; } catch (e) { return ''; } };
+  const b64dec = (b) => new TextDecoder().decode(Uint8Array.from(atob(b.replace(/\s/g, '')), (c) => c.charCodeAt(0)));
+  const b64enc = (str) => { const bytes = new TextEncoder().encode(str); let bin = ''; bytes.forEach((x) => { bin += String.fromCharCode(x); }); return btoa(bin); };
+
+  function wantedCustom() {
+    return customs.filter((g) => g.remind != null).map((g) => ({
       id: g.id, title: `${g.emoji} ${g.name}`,
       body: g.type === 'daily' ? `Bugünkü hedefin: ${g.target} ${g.unit}.` : g.type === 'weekly' ? `Bu haftaki hedefin: ${g.target} ${g.unit}.` : `Biraz ilerleme zamanı: ${g.progress || 0}/${g.target} ${g.unit}.`,
       hours: [g.remind],
     }));
-    const have = JSON.stringify((config.custom || []).map((c) => [c.id, c.hours]));
-    const need = JSON.stringify(want.map((c) => [c.id, c.hours]));
-    const synced = have === need;
-    $('custom-sync').hidden = !withRemind.length && !(config.custom || []).length;
-    $('custom-sync-msg').textContent = synced
-      ? '✅ Hedef hatırlatmaların GitHub\'daki ayarlarla aynı.'
-      : 'Hedef hatırlatmalarının gelmesi için bu satırı GitHub\'da config.json dosyasına ekle (varsa eski "custom" satırının yerine). "skipWeekends" satırının hemen altına yapıştırabilirsin.';
-    $('custom-snippet').value = `"custom": ${JSON.stringify(want)},`;
-    $('custom-snippet').hidden = synced; $('copy-snippet').hidden = synced;
   }
-  $('copy-snippet').addEventListener('click', async () => {
-    const ta = $('custom-snippet');
-    try { await navigator.clipboard.writeText(ta.value); } catch (e) { ta.focus(); ta.select(); document.execCommand && document.execCommand('copy'); }
-    $('snippet-state').textContent = 'Kopyalandı.';
+  const sameCustom = (a, b) => JSON.stringify((a || []).map((c) => [c.id, c.title, c.hours])) === JSON.stringify((b || []).map((c) => [c.id, c.title, c.hours]));
+
+  async function gh(path, opts = {}) {
+    const res = await fetch(`https://api.github.com/repos/${repo.owner}/${repo.name}/${path}`, {
+      ...opts,
+      headers: { Authorization: `Bearer ${ghToken()}`, Accept: 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28', ...(opts.headers || {}) },
+    });
+    return res;
+  }
+
+  let syncing = false;
+  async function syncCustoms(showToast = true) {
+    if (!repo || !ghToken() || syncing) return false;
+    syncing = true; $('gh-state').textContent = 'Eşitleniyor…';
+    try {
+      for (let attempt = 0; attempt < 2; attempt++) {
+        const r = await gh('contents/config.json?ref=main', { cache: 'no-store' });
+        if (r.status === 401) throw new Error('Anahtar geçersiz ya da süresi dolmuş.');
+        if (!r.ok) throw new Error(`config.json okunamadı (HTTP ${r.status}). Anahtarın bu depo için "Contents: Read and write" izni olmalı.`);
+        const file = await r.json();
+        const cfg = JSON.parse(b64dec(file.content));
+        const want = wantedCustom();
+        if (sameCustom(cfg.custom, want)) { config.custom = cfg.custom || []; break; }
+        cfg.custom = want;
+        const put = await gh('contents/config.json', {
+          method: 'PUT', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ message: 'Hedef hatırlatmaları güncellendi', content: b64enc(JSON.stringify(cfg, null, 2) + '\n'), sha: file.sha, branch: 'main' }),
+        });
+        if (put.status === 409 || put.status === 422) continue; // arada başka bir değişiklik olduysa bir kez daha dene
+        if (!put.ok) throw new Error(`config.json yazılamadı (HTTP ${put.status}). Anahtarın "Contents: Read and write" izni olmalı.`);
+        config.custom = want;
+        if (showToast) toast('🔔 Hedef bildirimleri güncellendi', false);
+        break;
+      }
+      renderGh(); renderNext(); renderSchedule();
+      return true;
+    } catch (e) {
+      $('gh-state').textContent = '⚠️ ' + e.message;
+      return false;
+    } finally { syncing = false; }
+  }
+
+  function renderGh() {
+    const on = !!ghToken();
+    $('gh-form').hidden = on; $('gh-sync').hidden = !on; $('gh-remove').hidden = !on;
+    if (!repo) { $('gh-state').textContent = 'Bu özellik uygulama GitHub Pages üzerinden açıldığında çalışır.'; return; }
+    const synced = sameCustom(config.custom, wantedCustom());
+    $('gh-state').textContent = !on
+      ? 'Bağlarsan, hatırlatma saati verdiğin her hedefin bildirimi otomatik kurulur. Anahtar sadece bu telefonda saklanır.'
+      : synced ? '✅ Bağlı. Hedef bildirimlerin güncel.' : 'Bağlı. Değişiklikler eşitlenecek…';
+  }
+  const renderSnippet = renderGh; // eski çağrılarla uyum
+
+  $('gh-save').addEventListener('click', async () => {
+    const t = $('gh-token').value.trim();
+    if (!t) { $('gh-state').textContent = 'Önce anahtarı yapıştır.'; return; }
+    try { localStorage.setItem(GH_KEY, t); } catch (e) {}
+    $('gh-token').value = '';
+    const ok = await syncCustoms(false);
+    if (ok) toast('GitHub bağlandı ✅', false);
+    else { try { localStorage.removeItem(GH_KEY); } catch (e) {} renderGh(); $('gh-form').hidden = false; }
+  });
+  $('gh-sync').addEventListener('click', () => syncCustoms(true));
+  $('gh-remove').addEventListener('click', () => {
+    if (!confirm('GitHub bağlantısı kaldırılsın mı? Mevcut hedef bildirimlerin çalışmaya devam eder, sadece yeni değişiklikler otomatik eşitlenmez.')) return;
+    try { localStorage.removeItem(GH_KEY); } catch (e) {}
+    renderGh();
   });
 
   // Alt sayfayı aç; iOS'ta ilk butona otomatik odak çerçevesi çıkmasın
@@ -478,7 +546,11 @@
   // ---------- ayarlar ----------
   $('btn-settings').addEventListener('click', () => openSheet('settings'));
   $('settings-close').addEventListener('click', () => $('settings').close());
-  $('sync-banner').addEventListener('click', (e) => { e.preventDefault(); openSheet('settings'); setTimeout(() => $('custom-sync').scrollIntoView({ block: 'center' }), 250); });
+  $('sync-banner').addEventListener('click', (e) => {
+    e.preventDefault();
+    if (ghToken()) { syncCustoms(true); return; }
+    openSheet('settings'); setTimeout(() => $('gh-state').scrollIntoView({ block: 'center' }), 250);
+  });
   $('setup-banner').addEventListener('click', (e) => { e.preventDefault(); openSheet('settings'); });
   document.querySelectorAll('dialog').forEach((dlg) => dlg.addEventListener('click', (e) => { if (e.target === dlg) dlg.close(); }));
   document.querySelectorAll('[data-goal]').forEach((b) => b.addEventListener('click', () => {
@@ -488,22 +560,29 @@
     store.set('mola.goals', goals); render();
   }));
 
-  async function loadConfig() {
-    try {
-      const c = await (await fetch('config.json', { cache: 'no-store' })).json();
-      config = { ...config, ...c };
-    } catch (e) { /* varsayılanlar kalır */ }
+  function renderSchedule() {
     const a = config.activeHours; const range = `${two(a.start)}:00–${two(a.end)}:59`;
     const items = [];
     if (config.walk.enabled) items.push(`🚶 Her saat başı yürüyüş (${range})`);
     if (config.water.enabled) items.push(`💧 Her saat buçukta su (${range})`);
     if (config.motivation.enabled) items.push(`✨ Motivasyon: ${config.motivation.hours.map((h) => two(h) + ':15').join(', ')}`);
-    (config.custom || []).forEach((c) => items.push(`${c.title}: ${c.hours.map((h) => two(h) + ':15').join(', ')}`));
+    (config.custom || []).forEach((c) => items.push(`${esc(c.title)}: ${c.hours.map((h) => two(h) + ':15').join(', ')}`));
+    if ((config.prayer || {}).enabled !== false) items.push('🕌 Namaz vakitleri (imsak, öğle, ikindi, akşam, yatsı)');
     if (config.skipWeekends) items.push('Hafta sonları bildirim yok');
     $('schedule').innerHTML = items.map((t) => `<li>${t}</li>`).join('') || '<li>Tüm bildirimler kapalı.</li>';
+  }
+
+  async function loadConfig() {
+    try {
+      const c = await (await fetch('config.json', { cache: 'no-store' })).json();
+      config = { ...config, ...c };
+    } catch (e) { /* varsayılanlar kalır */ }
+    renderSchedule();
     const m = config.messages && config.messages.motivation;
     if (m && m.length) $('quote').textContent = pick(m);
     render();
+    // Bağlıysa ve telefondaki hedefler GitHub'dakinden farklıysa sessizce eşitle
+    if (ghToken() && !sameCustom(config.custom, wantedCustom())) syncCustoms(false);
   }
 
   // ---------- bildirim kurulumu ----------
