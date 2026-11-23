@@ -1,0 +1,53 @@
+name: Namaz vakitleri
+
+on:
+  schedule:
+    - cron: '*/10 * * * *'
+  workflow_dispatch:
+    inputs:
+      test:
+        description: 'Sıradaki vakit için hemen deneme bildirimi gönderilsin mi?'
+        type: boolean
+        default: true
+
+permissions:
+  contents: write
+
+# Aynı anda tek çalıştırma: bir vakti bekleyen çalıştırma bitmeden yenisi başlamaz.
+concurrency:
+  group: namaz
+  cancel-in-progress: false
+
+jobs:
+  prayer:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci --no-audit --no-fund
+
+      - name: Vakti kontrol et ve bildir
+        run: node scripts/prayer.mjs
+        env:
+          TZ: Europe/Istanbul
+          PUSH_CONFIG: ${{ secrets.PUSH_CONFIG }}
+          VAPID_SUBJECT: https://${{ github.repository_owner }}.github.io
+          TEST: ${{ inputs.test && 'true' || 'false' }}
+
+      - name: Vakit tablosunu ve gönderim kaydını sakla
+        if: always()
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add prayer-times.json
+          [ -f .github/prayer-state.json ] && git add .github/prayer-state.json
+          if ! git diff --cached --quiet; then
+            git commit -m "namaz vakitleri"
+            git pull --rebase --quiet && git push --quiet
+          fi
