@@ -115,17 +115,33 @@
     const now = new Date();
     const { start, end } = config.activeHours;
     const isWeekend = [0, 6].includes(now.getDay());
-    const slots = [];
+    const mins = now.getHours() * 60 + now.getMinutes();
+    const items = []; // [dakika, etiket]
     if (!(config.skipWeekends && isWeekend)) {
       for (let h = start; h <= end; h++) {
-        if (config.walk.enabled) slots.push([h, 2, '🚶 yürüyüş']);
-        if (config.water.enabled) slots.push([h, 32, '💧 su']);
+        if (config.walk.enabled) items.push([h * 60, '🚶 yürüyüş']);
+        if (config.water.enabled) items.push([h * 60 + 30, '💧 su']);
       }
-      if (config.motivation.enabled) config.motivation.hours.forEach((h) => slots.push([h, 17, '✨ motivasyon']));
+      if (config.motivation.enabled) config.motivation.hours.forEach((h) => items.push([h * 60 + 15, '✨ motivasyon']));
+      (config.custom || []).forEach((c) => (c.hours || []).forEach((h) => items.push([h * 60 + 15, c.title])));
     }
-    const mins = now.getHours() * 60 + now.getMinutes();
-    const next = slots.map(([h, m, l]) => [h * 60 + m, `${two(h)}:${two(m)}`, l]).filter(([t]) => t > mins).sort((a, b) => a[0] - b[0])[0];
-    $('next').textContent = next ? `Sıradaki: ${next[2]} · ${next[1]}` : `Bugünlük bu kadar. Yarın ${two(start)}:02'de görüşürüz.`;
+    // Namaz vakitleri (hafta sonu da gelir)
+    const pt = prayerTable && prayerTable.days && prayerTable.days[dayKey()];
+    if (pt) {
+      const on = { imsak: true, gunes: false, ogle: true, ikindi: true, aksam: true, yatsi: true, ...((config.prayer || {}).times || {}) };
+      if ((config.prayer || {}).enabled !== false) {
+        PV.forEach(([k, l]) => { if (on[k]) items.push([toMin(pt[k]), `🕌 ${l}`]); });
+      }
+    }
+    const next = items.filter(([t]) => t > mins).sort((a, b) => a[0] - b[0])[0];
+    $('next').textContent = next
+      ? `Sıradaki: ${next[1]} · ${two(Math.floor(next[0] / 60))}:${two(next[0] % 60)}`
+      : 'Bugünlük bu kadar. Yarın görüşürüz.';
+    // Uygulamada hatırlatma verilmiş ama GitHub'a eklenmemiş hedef var mı?
+    const have = new Set((config.custom || []).map((c) => c.id + ':' + (c.hours || []).join(',')));
+    const pending = customs.filter((g) => g.remind != null && !have.has(g.id + ':' + g.remind));
+    $('sync-banner').hidden = !pending.length;
+    if (pending.length) $('sync-banner').textContent = `${pending.map((g) => g.emoji + ' ' + g.name).join(', ')} hatırlatması henüz çalışmıyor. Açmak için dokun.`;
   }
 
   function renderHeader() {
@@ -157,7 +173,7 @@
       const r = await fetch('prayer-times.json', { cache: 'no-store' });
       if (r.ok) prayerTable = await r.json();
     } catch (e) { /* çevrimdışı */ }
-    renderPrayer();
+    render();
   }
   function renderPrayer() {
     const card = $('prayer-card');
@@ -291,7 +307,7 @@
     finish: 'Sıfırlanmaz, bitince tamamlanır. Örnek: diziyi bitir, 10 bölüm.',
   };
   let editing = null; let form = {};
-  for (let h = 7; h <= 23; h++) $('f-remind').insertAdjacentHTML('beforeend', `<option value="${h}">Her gün ${two(h)}:15 civarı</option>`);
+  for (let h = 7; h <= 23; h++) $('f-remind').insertAdjacentHTML('beforeend', `<option value="${h}">Her gün ${two(h)}:15</option>`);
   function paintEditor() {
     $('emoji-row').innerHTML = EMOJIS.map((e) => `<button type="button" role="radio" aria-checked="${e === form.emoji}" data-emoji="${e}">${e}</button>`).join('');
     document.querySelectorAll('#f-type button').forEach((b) => b.setAttribute('aria-checked', String(b.dataset.type === form.type)));
@@ -462,6 +478,7 @@
   // ---------- ayarlar ----------
   $('btn-settings').addEventListener('click', () => openSheet('settings'));
   $('settings-close').addEventListener('click', () => $('settings').close());
+  $('sync-banner').addEventListener('click', (e) => { e.preventDefault(); openSheet('settings'); setTimeout(() => $('custom-sync').scrollIntoView({ block: 'center' }), 250); });
   $('setup-banner').addEventListener('click', (e) => { e.preventDefault(); openSheet('settings'); });
   document.querySelectorAll('dialog').forEach((dlg) => dlg.addEventListener('click', (e) => { if (e.target === dlg) dlg.close(); }));
   document.querySelectorAll('[data-goal]').forEach((b) => b.addEventListener('click', () => {
