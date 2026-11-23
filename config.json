@@ -1,0 +1,44 @@
+{
+  "timezone": "Europe/Istanbul",
+  "activeHours": { "start": 9, "end": 21 },
+  "skipWeekends": false,
+  "walk": { "enabled": true },
+  "water": { "enabled": true },
+  "motivation": { "enabled": true, "hours": [10, 14, 18] },
+  "messages": {
+    "walk": [
+      "Kalk, 5 dakika yürü. Bacakların sana teşekkür edecek.",
+      "Ekrandan kısa bir mola: 5 dakikalık yürüyüş zamanı.",
+      "Bir tur at, pencereden dışarı bak, sonra devam.",
+      "Omuzlarını gevşet, kalk ve 5 dakika yürü.",
+      "Uzun süre oturdun. Kısa bir yürüyüş kafanı da açar.",
+      "Merdivenler, koridor, balkon… 5 dakika hareket et.",
+      "Yürüyüş molası! Dönünce işler daha kolay gelecek."
+    ],
+    "water": [
+      "Bir bardak su iç. Vücudun bunu bekliyor.",
+      "Su molası 💧 Bir bardak yeter.",
+      "Susamadan iç: bir bardak su zamanı.",
+      "Bardağını doldur, bir dikişte olmasa da bitir.",
+      "Baş ağrısı ve yorgunluğun bir sebebi de susuzluk olabilir. Bir bardak su!",
+      "Saat buçuk oldu, bir bardak su içme zamanı."
+    ],
+    "motivation": [
+      "Küçük adımlar da adımdır. Bugün attığın her biri sayılır.",
+      "Mükemmel olmak zorunda değilsin, sadece devam et.",
+      "Dünkü senden biraz daha iyi olman yeterli.",
+      "Zor kısım başlamaktı, onu zaten yaptın.",
+      "Kendine bir arkadaşına davrandığın kadar nazik davran.",
+      "Bugün yorulduysan dinlen, ama vazgeçme.",
+      "Her saat yeni bir başlangıç fırsatı.",
+      "Disiplin, motivasyonun olmadığı günlerde seni taşır.",
+      "Yaptıklarına bir bak: sandığından fazlası var.",
+      "Bir derin nefes al. Şu an iyisin.",
+      "İlerleme sessizdir; sonuçlar sonra gürültü yapar.",
+      "Bedenine iyi bakmak, kendine verdiğin en iyi sözdür.",
+      "Bugün kendin için yaptığın küçük bir şey bile büyük fark yaratır.",
+      "Yavaş gitmek, hiç gitmemekten iyidir.",
+      "Sen bu günü de hallederiz diyenlerdensin."
+    ]
+  }
+}

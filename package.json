@@ -1,0 +1,9 @@
+{
+  "name": "mola",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "adhan": "^4.4.6",
+    "web-push": "^3.6.7"
+  }
+}

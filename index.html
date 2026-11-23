@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="tr" data-theme="auto">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#eef1ea">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="Mola">
+  <title>Mola</title>
+  <script>try{document.documentElement.dataset.theme=localStorage.getItem('mola.theme')||'auto'}catch(e){}</script>
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="apple-touch-icon" href="icons/icon-180.png">
+  <link rel="icon" href="icons/icon-192.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <main>
+    <header class="top">
+      <div>
+        <p id="date" class="date"></p>
+        <h1 id="greeting">Merhaba</h1>
+      </div>
+      <button class="icon-btn" id="btn-settings" aria-label="Ayarlar">
+        <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2" fill="none" stroke="currentColor" stroke-width="1.8"/><circle cx="10" cy="17" r="2" fill="none" stroke="currentColor" stroke-width="1.8"/></svg>
+      </button>
+    </header>
+
+    <p class="next" id="next"></p>
+    <a href="#" class="setup-banner" id="setup-banner" hidden>Bildirimler henüz kurulmadı. Kurmak için dokun.</a>
+
+    <div class="bento">
+      <!-- Namaz vakitleri -->
+      <section class="card c-prayer wide" id="prayer-card" aria-label="Namaz vakitleri" hidden>
+        <div class="card-head"><span>Namaz vakitleri</span><span class="chip" id="prayer-place"></span></div>
+        <p class="prayer-next" id="prayer-next"></p>
+        <div class="prayer-grid" id="prayer-grid"></div>
+      </section>
+      <!-- Su -->
+      <section class="card c-water" aria-label="Su">
+        <div class="card-head"><span>Su</span><span class="chip" id="water-pct">%0</span></div>
+        <button class="glass-btn" id="glass" aria-label="Bir bardak su ekle">
+          <svg viewBox="0 0 160 220" class="glass" aria-hidden="true">
+            <defs>
+              <clipPath id="glass-clip"><path d="M24 14 H136 L123 204 Q122 210 116 210 H44 Q38 210 37 204 Z"/></clipPath>
+            </defs>
+            <g clip-path="url(#glass-clip)">
+              <rect width="160" height="220" class="glass-bg"/>
+              <g id="water-level" class="water-level" style="transform: translateY(216px)">
+                <path class="wave wave-back" d="M0 8 Q20 0 40 8 T80 8 T120 8 T160 8 T200 8 T240 8 T280 8 T320 8 V240 H0 Z"/>
+                <path class="wave wave-front" d="M0 10 Q20 2 40 10 T80 10 T120 10 T160 10 T200 10 T240 10 T280 10 T320 10 V240 H0 Z"/>
+              </g>
+            </g>
+            <path d="M24 14 H136 L123 204 Q122 210 116 210 H44 Q38 210 37 204 Z" class="glass-outline"/>
+          </svg>
+          <span class="burst" id="burst" aria-hidden="true"></span>
+        </button>
+        <p class="count"><span id="water-n">0</span><span class="of"> / <span id="water-goal">8</span> bardak</span></p>
+        <p class="nudge" id="water-msg"></p>
+        <button class="pill pill-water" id="add-water">+ 1 bardak</button>
+      </section>
+
+      <!-- Yürüyüş halkası -->
+      <section class="card c-walk" aria-label="Yürüyüş">
+        <div class="card-head"><span>Hareket</span></div>
+        <button class="ring-btn" id="ring" aria-label="Yürüyüş ekle">
+          <svg viewBox="0 0 120 120" class="ring" aria-hidden="true">
+            <circle cx="60" cy="60" r="50" class="ring-track"/>
+            <circle cx="60" cy="60" r="50" class="ring-fill" id="ring-fill" pathLength="100" stroke-dasharray="0 100"/>
+          </svg>
+          <span class="ring-label"><b id="walk-n">0</b><small>/<span id="walk-goal">6</span></small></span>
+        </button>
+        <button class="pill pill-walk" id="add-walk">Yürüdüm</button>
+      </section>
+
+      <!-- Seri -->
+      <section class="card c-streak" aria-label="Seri">
+        <div class="card-head"><span>Seri</span></div>
+        <p class="streak-n"><span id="streak-n">0</span><small> gün</small></p>
+        <p class="streak-msg" id="streak-msg"></p>
+      </section>
+
+      <!-- Adımlar -->
+      <section class="card c-steps" aria-label="Adımlar">
+        <div class="card-head"><span>Adım</span><span class="chip" id="steps-time" hidden></span></div>
+        <button class="steps-n" id="steps-n" aria-label="Adım sayısını elle gir">0</button>
+        <p class="sub-goal">/ <span id="steps-goal">8.000</span> adım</p>
+        <div class="pbar"><span id="steps-bar"></span></div>
+        <button class="pill pill-dark" id="paste-steps">Adımları yapıştır</button>
+      </section>
+
+      <!-- Özel hedefler -->
+      <div id="custom-cards" class="contents"></div>
+      <button class="card c-add" id="add-goal"><span>＋</span>Yeni hedef</button>
+
+      <!-- Saatler -->
+      <section class="card c-hours wide" aria-label="Bugünkü yürüyüşler">
+        <div class="card-head"><span>Bugünkü molalar</span><span class="muted" id="hours-sum"></span></div>
+        <div class="hours" id="hours" role="list"></div>
+      </section>
+
+      <!-- Hafta -->
+      <section class="card c-week wide" aria-label="Son 7 gün">
+        <div class="card-head"><span>Son 7 gün</span><span class="muted" id="week-sum"></span></div>
+        <div class="week-grid" id="week"></div>
+        <p class="legend"><i class="lg-water"></i>su <i class="lg-walk"></i>yürüyüş hedefi</p>
+      </section>
+
+      <!-- Söz -->
+      <section class="card c-quote wide">
+        <blockquote id="quote"></blockquote>
+      </section>
+    </div>
+  </main>
+
+  <div class="toast" id="toast" role="status" hidden>
+    <span id="toast-text"></span>
+    <button id="toast-undo">Geri al</button>
+  </div>
+
+  <dialog class="sheet ask" id="ask">
+    <p class="ask-emoji" id="ask-emoji">💧</p>
+    <h2 id="ask-title">Su içtin mi?</h2>
+    <div class="ask-actions">
+      <button class="pill pill-water" id="ask-yes">İçtim</button>
+      <button class="pill pill-ghost" id="ask-no">Şimdi değil</button>
+    </div>
+  </dialog>
+
+  <dialog class="sheet" id="settings">
+    <div class="sheet-head">
+      <h2>Ayarlar</h2>
+      <button class="icon-btn" id="settings-close" aria-label="Kapat">✕</button>
+    </div>
+
+    <h3>Tema</h3>
+    <div class="themes" id="themes" role="radiogroup" aria-label="Tema">
+      <button data-theme-pick="auto" role="radio"><span class="sw sw-auto"></span>Otomatik</button>
+      <button data-theme-pick="sage" role="radio"><span class="sw sw-sage"></span>Adaçayı</button>
+      <button data-theme-pick="peach" role="radio"><span class="sw sw-peach"></span>Şeftali</button>
+      <button data-theme-pick="lavender" role="radio"><span class="sw sw-lavender"></span>Lavanta</button>
+      <button data-theme-pick="night" role="radio"><span class="sw sw-night"></span>Gece</button>
+    </div>
+
+    <h3>Günlük hedefler</h3>
+    <div class="stepper">
+      <span>💧 Su (bardak)</span>
+      <div><button data-goal="water" data-d="-1" aria-label="Azalt">−</button><b id="g-water">8</b><button data-goal="water" data-d="1" aria-label="Artır">+</button></div>
+    </div>
+    <div class="stepper">
+      <span>🚶 Yürüyüş molası</span>
+      <div><button data-goal="walk" data-d="-1" aria-label="Azalt">−</button><b id="g-walk">6</b><button data-goal="walk" data-d="1" aria-label="Artır">+</button></div>
+    </div>
+
+    <div class="stepper">
+      <span>👟 Adım</span>
+      <div><button data-goal="steps" data-d="-1" aria-label="Azalt">−</button><b id="g-steps">8.000</b><button data-goal="steps" data-d="1" aria-label="Artır">+</button></div>
+    </div>
+
+    <details class="howto">
+      <summary>Adım kestirmesini kurma</summary>
+      <ol>
+        <li><b>Kestirmeler</b> uygulamasını aç ve sağ üstteki <b>+</b>'ya dokun.</li>
+        <li><b>Sağlık Örneklerini Bul</b> eylemini ekle. Türü <b>Adımlar</b>, başlangıç tarihini <b>Bugün</b> yap.</li>
+        <li><b>İstatistikleri Hesapla</b> eylemini ekle ve <b>Toplam</b>'ı seç.</li>
+        <li><b>Sayıyı Yuvarla</b> eylemini ekle, ardından <b>Panoya Kopyala</b> eylemini ekle.</li>
+        <li>Kestirmenin adını “Adımlarım” yap. Paylaş menüsünden <b>Ana Ekrana Ekle</b>'yi seç.</li>
+        <li>Kullanırken önce kestirmeye, sonra Mola'da <b>Adımları yapıştır</b>'a dokun.</li>
+      </ol>
+      <p class="small">Eylem adları iOS sürümüne göre biraz farklı olabilir. Apple Watch da kullanıyorsan sayı Sağlık uygulamasındakinden yüksek çıkabilir. Bunu önlemek için 2. adımda kaynak olarak sadece iPhone'u seç.</p>
+    </details>
+
+    <h3>Bildirimler</h3>
+    <div id="not-installed" class="notice" hidden>
+      Bildirimler için uygulamayı ana ekrandan açman gerekiyor: Safari'de <b>Paylaş → Ana Ekrana Ekle</b>.
+    </div>
+    <p class="muted" id="perm-state">…</p>
+    <button class="pill pill-dark" id="btn-enable">Bildirimleri aç</button>
+    <div id="step-copy" hidden>
+      <p class="small">Bu anahtarı GitHub'da <code>PUSH_CONFIG</code> secret'ı olarak kaydet.</p>
+      <textarea id="push-config" readonly rows="3"></textarea>
+      <button class="pill pill-ghost" id="btn-copy">Anahtarı kopyala</button>
+      <span class="small" id="copy-state"></span>
+    </div>
+    <button class="pill pill-ghost" id="btn-test">Test bildirimi göster</button>
+
+    <h3>Program</h3>
+    <ul class="schedule" id="schedule"></ul>
+    <p class="small">Saatleri değiştirmek için GitHub'da <code>config.json</code> dosyasını düzenle.</p>
+
+    <div id="custom-sync" hidden>
+      <h3>Hedef hatırlatmaları</h3>
+      <p class="small" id="custom-sync-msg"></p>
+      <textarea id="custom-snippet" readonly rows="4"></textarea>
+      <button class="pill pill-ghost" id="copy-snippet">Satırı kopyala</button>
+      <span class="small" id="snippet-state"></span>
+    </div>
+
+    <button class="link-danger" id="btn-reset">Bildirim aboneliğini sıfırla</button>
+  </dialog>
+
+  <!-- Hedef düzenleyici -->
+  <dialog class="sheet" id="goal-editor">
+    <form method="dialog" id="goal-form">
+      <div class="sheet-head">
+        <h2 id="goal-editor-title">Yeni hedef</h2>
+        <button type="button" class="icon-btn" id="goal-close" aria-label="Kapat">✕</button>
+      </div>
+
+      <div class="emoji-row" id="emoji-row" role="radiogroup" aria-label="Simge"></div>
+
+      <label class="field"><span>Hedefin adı</span>
+        <input id="f-name" required maxlength="28" placeholder="Kitap okuma" autocomplete="off"></label>
+
+      <div class="field"><span>Türü</span>
+        <div class="seg" id="f-type" role="radiogroup">
+          <button type="button" data-type="daily" role="radio">Her gün</button>
+          <button type="button" data-type="weekly" role="radio">Her hafta</button>
+          <button type="button" data-type="finish" role="radio">Bitir</button>
+        </div>
+        <small class="small" id="type-hint"></small>
+      </div>
+
+      <div class="field-row">
+        <label class="field"><span>Hedef</span><input id="f-target" type="number" inputmode="numeric" min="1" max="100000" required value="20"></label>
+        <label class="field"><span>Birim</span><input id="f-unit" maxlength="12" placeholder="sayfa" value="sayfa" autocomplete="off"></label>
+        <label class="field"><span>Her dokunuş</span><input id="f-step" type="number" inputmode="numeric" min="1" max="10000" value="5"></label>
+      </div>
+
+      <div class="field"><span>Renk</span>
+        <div class="colors" id="f-color" role="radiogroup">
+          <button type="button" data-color="water" style="background:var(--c-water)" aria-label="Mavi"></button>
+          <button type="button" data-color="walk" style="background:var(--c-walk)" aria-label="Yeşil"></button>
+          <button type="button" data-color="streak" style="background:var(--c-streak)" aria-label="Pembe"></button>
+          <button type="button" data-color="quote" style="background:var(--c-quote)" aria-label="Bej"></button>
+          <button type="button" data-color="plain" style="background:var(--c-plain)" aria-label="Açık"></button>
+        </div>
+      </div>
+
+      <label class="field"><span>Hatırlatma bildirimi</span>
+        <select id="f-remind">
+          <option value="">Yok</option>
+        </select>
+      </label>
+
+      <button type="submit" class="pill pill-dark" id="goal-save">Kaydet</button>
+      <button type="button" class="link-danger" id="goal-delete" hidden>Hedefi sil</button>
+    </form>
+  </dialog>
+
+  <script src="app.js"></script>
+</body>
+</html>
