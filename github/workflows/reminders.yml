@@ -1,0 +1,41 @@
+name: Hatirlatmalar
+
+# Zamanlamayı cron-job.org yapıyor (GitHub'ın kendi zamanlayıcısı bu depoda çalışmadı).
+# cron-job.org her seferinde slot ve auto=true göndererek bu iş akışını başlatır.
+on:
+  workflow_dispatch:
+    inputs:
+      slot:
+        description: 'Hangi bildirim?'
+        type: choice
+        options: [walk, water, motivation]
+        default: walk
+      auto:
+        description: 'Zamanlayıcıdan mı geliyor? (saat kontrolleri uygulanır)'
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+jobs:
+  send:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci --no-audit --no-fund
+
+      - name: Bildirimi gönder
+        run: node scripts/send.mjs
+        env:
+          PUSH_CONFIG: ${{ secrets.PUSH_CONFIG }}
+          MANUAL_SLOT: ${{ !inputs.auto && inputs.slot || '' }}
+          AUTO_SLOT: ${{ inputs.auto && inputs.slot || '' }}
+          VAPID_SUBJECT: https://${{ github.repository_owner }}.github.io
