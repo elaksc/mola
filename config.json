@@ -1,10 +1,24 @@
 {
   "timezone": "Europe/Istanbul",
-  "activeHours": { "start": 9, "end": 21 },
+  "activeHours": {
+    "start": 9,
+    "end": 21
+  },
   "skipWeekends": false,
-  "walk": { "enabled": true },
-  "water": { "enabled": true },
-  "motivation": { "enabled": true, "hours": [10, 14, 18] },
+  "walk": {
+    "enabled": true
+  },
+  "water": {
+    "enabled": true
+  },
+  "motivation": {
+    "enabled": true,
+    "hours": [
+      10,
+      14,
+      18
+    ]
+  },
   "messages": {
     "walk": [
       "Kalk, 5 dakika yürü. Bacakların sana teşekkür edecek.",
@@ -40,5 +54,23 @@
       "Yavaş gitmek, hiç gitmemekten iyidir.",
       "Sen bu günü de hallederiz diyenlerdensin."
     ]
-  }
+  },
+  "custom": [
+    {
+      "id": "gmwt5iwbn",
+      "title": "🎬 Yeni dizi: After life",
+      "body": "Bugünkü hedefin: 2 Bölüm.",
+      "hours": [
+        17
+      ]
+    },
+    {
+      "id": "gmwt8sjpp",
+      "title": "🧘 Haticeyi Ara",
+      "body": "Bugünkü hedefin: 1 Arama.",
+      "hours": [
+        15
+      ]
+    }
+  ]
 }
