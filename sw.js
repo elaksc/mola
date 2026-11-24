@@ -1,5 +1,5 @@
 // Mola service worker: sunucudan gelen push'u bildirim olarak gösterir.
-const CACHE = 'mola-v10';
+const CACHE = 'mola-v11';
 const ASSETS = ['./', 'index.html', 'style.css', 'app.js', 'manifest.webmanifest', 'icons/icon-192.png'];
 
 self.addEventListener('install', (event) => {
@@ -16,21 +16,24 @@ self.addEventListener('activate', (event) => {
 
 // Önce ağ, olmazsa önbellek (config.json güncel kalsın diye).
 self.addEventListener('fetch', (event) => {
-  if (event.request.method !== 'GET') return;
-  event.respondWith(
-    fetch(event.request)
-      .then((res) => {
-        // Site geçici olarak yoksa (404 vb.) önbellekteki çalışan sürümü göster, hatayı saklama
-        if (!res.ok) return caches.match(event.request).then((cached) => cached || res);
+  const req = event.request;
+  // Sadece uygulamanın kendi dosyaları; sunucu (workers.dev), yazı tipleri vb. doğrudan ağdan gitsin
+  if (req.method !== 'GET' || new URL(req.url).origin !== self.location.origin) return;
+  event.respondWith((async () => {
+    try {
+      const res = await fetch(req);
+      if (res.ok) {
         const copy = res.clone();
-        caches.open(CACHE).then((c) => c.put(event.request, copy)).catch(() => {});
+        caches.open(CACHE).then((c) => c.put(req, copy)).catch(() => {});
         return res;
-      })
-      .catch(() => caches.match(event.request))
-  );
+      }
+      return (await caches.match(req)) || res;
+    } catch (e) {
+      return (await caches.match(req)) || new Response('Çevrimdışı', { status: 503, headers: { 'Content-Type': 'text/plain; charset=utf-8' } });
+    }
+  })());
 });
 
-// iOS her push'ta mutlaka bir bildirim gösterilmesini ister; yoksa aboneliği iptal edebilir.
 self.addEventListener('push', (event) => {
   let data = {};
   try { data = event.data ? event.data.json() : {}; } catch (e) { data = { body: event.data && event.data.text() }; }
