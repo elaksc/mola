@@ -137,13 +137,9 @@
     $('next').textContent = next
       ? `Sıradaki: ${next[1]} · ${two(Math.floor(next[0] / 60))}:${two(next[0] % 60)}`
       : 'Bugünlük bu kadar. Yarın görüşürüz.';
-    // Uygulamada hatırlatma verilmiş ama GitHub'a eklenmemiş hedef var mı?
-    const have = new Set((config.custom || []).map((c) => c.id + ':' + (c.hours || []).join(',')));
-    const pending = customs.filter((g) => g.remind != null && !have.has(g.id + ':' + g.remind));
-    $('sync-banner').hidden = !pending.length;
-    if (pending.length) $('sync-banner').textContent = ghToken()
-      ? `${pending.map((g) => g.emoji + ' ' + g.name).join(', ')} bildirimi eşitlenmedi. Tekrar denemek için dokun.`
-      : `${pending.map((g) => g.emoji + ' ' + g.name).join(', ')} bildirimi henüz kurulmadı. Kurmak için dokun.`;
+    const pending = connected() && (goalsPending || !sameCustom(config.custom, wantedCustom()));
+    $('sync-banner').hidden = !pending;
+    if (pending) $('sync-banner').textContent = 'Hedef bildirimlerin sunucuya kaydedilemedi. Tekrar denemek için dokun.';
   }
 
   function renderHeader() {
@@ -275,7 +271,6 @@
         <button class="pill" data-add="${g.id}" ${done && g.type === 'finish' ? 'disabled' : ''}>${label}</button>
       </section>`;
     }).join('');
-    renderSnippet();
   }
 
   function addCustom(id) {
@@ -358,16 +353,24 @@
   });
 
   // bildirim satırı (config.json için)
-  // ---------- hedef bildirimlerini GitHub'a otomatik yaz ----------
-  const GH_KEY = 'mola.gh';
-  const repo = (() => {
-    const owner = location.hostname.endsWith('.github.io') ? location.hostname.split('.')[0] : null;
-    const name = location.pathname.split('/').filter(Boolean)[0];
-    return owner && name ? { owner, name } : null;
-  })();
-  const ghToken = () => { try { return localStorage.getItem(GH_KEY) || ''; } catch (e) { return ''; } };
-  const b64dec = (b) => new TextDecoder().decode(Uint8Array.from(atob(b.replace(/\s/g, '')), (c) => c.charCodeAt(0)));
-  const b64enc = (str) => { const bytes = new TextEncoder().encode(str); let bin = ''; bytes.forEach((x) => { bin += String.fromCharCode(x); }); return btoa(bin); };
+  // ---------- bildirim sunucusu (Cloudflare Worker) ----------
+  const SRV_URL = 'mola.srv'; const SRV_TOKEN = 'mola.srvtoken';
+  const lsGet = (k) => { try { return localStorage.getItem(k) || ''; } catch (e) { return ''; } };
+  const lsSet = (k, v) => { try { v ? localStorage.setItem(k, v) : localStorage.removeItem(k); } catch (e) {} };
+  const srvUrl = () => lsGet(SRV_URL).replace(/\/+$/, '');
+  const srvToken = () => lsGet(SRV_TOKEN);
+  const connected = () => !!(srvUrl() && srvToken());
+
+  async function api(path, method = 'GET', body) {
+    const res = await fetch(srvUrl() + path, {
+      method, cache: 'no-store',
+      headers: { 'Content-Type': 'application/json', 'X-Mola-Token': srvToken() },
+      body: body ? JSON.stringify(body) : undefined,
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) { const err = new Error(data.error || `Sunucu hatası (HTTP ${res.status})`); err.status = res.status; throw err; }
+    return data;
+  }
 
   function wantedCustom() {
     return customs.filter((g) => g.remind != null).map((g) => ({
@@ -378,72 +381,38 @@
   }
   const sameCustom = (a, b) => JSON.stringify((a || []).map((c) => [c.id, c.title, c.hours])) === JSON.stringify((b || []).map((c) => [c.id, c.title, c.hours]));
 
-  async function gh(path, opts = {}) {
-    const res = await fetch(`https://api.github.com/repos/${repo.owner}/${repo.name}/${path}`, {
-      ...opts,
-      headers: { Authorization: `Bearer ${ghToken()}`, Accept: 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28', ...(opts.headers || {}) },
-    });
-    return res;
+  function applyServer(data) {
+    if (data.config) config = { ...config, ...data.config };
+    config.custom = data.custom || [];
+    renderSchedule(); renderSettings(); render();
   }
 
-  let syncing = false;
+  let goalsPending = false;
   async function syncCustoms(showToast = true) {
-    if (!repo || !ghToken() || syncing) return false;
-    syncing = true; $('gh-state').textContent = 'Eşitleniyor…';
+    if (!connected()) return;
     try {
-      for (let attempt = 0; attempt < 2; attempt++) {
-        const r = await gh('contents/config.json?ref=main', { cache: 'no-store' });
-        if (r.status === 401) throw new Error('Anahtar geçersiz ya da süresi dolmuş.');
-        if (!r.ok) throw new Error(`config.json okunamadı (HTTP ${r.status}). Anahtarın bu depo için "Contents: Read and write" izni olmalı.`);
-        const file = await r.json();
-        const cfg = JSON.parse(b64dec(file.content));
-        const want = wantedCustom();
-        if (sameCustom(cfg.custom, want)) { config.custom = cfg.custom || []; break; }
-        cfg.custom = want;
-        const put = await gh('contents/config.json', {
-          method: 'PUT', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ message: 'Hedef hatırlatmaları güncellendi', content: b64enc(JSON.stringify(cfg, null, 2) + '\n'), sha: file.sha, branch: 'main' }),
-        });
-        if (put.status === 409 || put.status === 422) continue; // arada başka bir değişiklik olduysa bir kez daha dene
-        if (!put.ok) throw new Error(`config.json yazılamadı (HTTP ${put.status}). Anahtarın "Contents: Read and write" izni olmalı.`);
-        config.custom = want;
-        if (showToast) toast('🔔 Hedef bildirimleri güncellendi', false);
-        break;
-      }
-      renderGh(); renderNext(); renderSchedule();
-      return true;
+      applyServer(await api('/api/goals', 'POST', { custom: wantedCustom() }));
+      goalsPending = false;
+      if (showToast) toast('🔔 Hedef bildirimleri güncellendi', false);
+    } catch (e) { goalsPending = true; renderNext(); }
+  }
+  async function pushSettings() {
+    if (!connected()) return;
+    try { applyServer(await api('/api/settings', 'POST', { config: pick4(config) })); }
+    catch (e) { toast('Ayar kaydedilemedi: ' + e.message, false); }
+  }
+  const pick4 = (c) => ({ activeHours: c.activeHours, skipWeekends: c.skipWeekends, walk: c.walk, water: c.water, motivation: c.motivation, prayer: c.prayer });
+
+  async function refreshFromServer() {
+    if (!connected()) return;
+    try {
+      const data = await api('/api/status');
+      applyServer(data);
+      if (!sameCustom(data.custom, wantedCustom())) syncCustoms(false);
     } catch (e) {
-      $('gh-state').textContent = '⚠️ ' + e.message;
-      return false;
-    } finally { syncing = false; }
+      if (e.status === 401) { lsSet(SRV_TOKEN, ''); setPermState(); }
+    }
   }
-
-  function renderGh() {
-    const on = !!ghToken();
-    $('gh-form').hidden = on; $('gh-sync').hidden = !on; $('gh-remove').hidden = !on;
-    if (!repo) { $('gh-state').textContent = 'Bu özellik uygulama GitHub Pages üzerinden açıldığında çalışır.'; return; }
-    const synced = sameCustom(config.custom, wantedCustom());
-    $('gh-state').textContent = !on
-      ? 'Bağlarsan, hatırlatma saati verdiğin her hedefin bildirimi otomatik kurulur. Anahtar sadece bu telefonda saklanır.'
-      : synced ? '✅ Bağlı. Hedef bildirimlerin güncel.' : 'Bağlı. Değişiklikler eşitlenecek…';
-  }
-  const renderSnippet = renderGh; // eski çağrılarla uyum
-
-  $('gh-save').addEventListener('click', async () => {
-    const t = $('gh-token').value.trim();
-    if (!t) { $('gh-state').textContent = 'Önce anahtarı yapıştır.'; return; }
-    try { localStorage.setItem(GH_KEY, t); } catch (e) {}
-    $('gh-token').value = '';
-    const ok = await syncCustoms(false);
-    if (ok) toast('GitHub bağlandı ✅', false);
-    else { try { localStorage.removeItem(GH_KEY); } catch (e) {} renderGh(); $('gh-form').hidden = false; }
-  });
-  $('gh-sync').addEventListener('click', () => syncCustoms(true));
-  $('gh-remove').addEventListener('click', () => {
-    if (!confirm('GitHub bağlantısı kaldırılsın mı? Mevcut hedef bildirimlerin çalışmaya devam eder, sadece yeni değişiklikler otomatik eşitlenmez.')) return;
-    try { localStorage.removeItem(GH_KEY); } catch (e) {}
-    renderGh();
-  });
 
   // Alt sayfayı aç; iOS'ta ilk butona otomatik odak çerçevesi çıkmasın
   function openSheet(id) {
@@ -546,11 +515,7 @@
   // ---------- ayarlar ----------
   $('btn-settings').addEventListener('click', () => openSheet('settings'));
   $('settings-close').addEventListener('click', () => $('settings').close());
-  $('sync-banner').addEventListener('click', (e) => {
-    e.preventDefault();
-    if (ghToken()) { syncCustoms(true); return; }
-    openSheet('settings'); setTimeout(() => $('gh-state').scrollIntoView({ block: 'center' }), 250);
-  });
+  $('sync-banner').addEventListener('click', (e) => { e.preventDefault(); syncCustoms(true); });
   $('setup-banner').addEventListener('click', (e) => { e.preventDefault(); openSheet('settings'); });
   document.querySelectorAll('dialog').forEach((dlg) => dlg.addEventListener('click', (e) => { if (e.target === dlg) dlg.close(); }));
   document.querySelectorAll('[data-goal]').forEach((b) => b.addEventListener('click', () => {
@@ -572,24 +537,46 @@
     $('schedule').innerHTML = items.map((t) => `<li>${t}</li>`).join('') || '<li>Tüm bildirimler kapalı.</li>';
   }
 
+  // Ayarlar sayfasındaki program kontrolleri
+  function renderSettings() {
+    $('h-start').textContent = two(config.activeHours.start) + ':00';
+    $('h-end').textContent = two(config.activeHours.end) + ':59';
+    $('t-walk').checked = !!config.walk.enabled;
+    $('t-water').checked = !!config.water.enabled;
+    $('t-motivation').checked = !!config.motivation.enabled;
+    $('t-prayer').checked = (config.prayer || {}).enabled !== false;
+    $('t-weekend').checked = !!config.skipWeekends;
+    $('program-note').textContent = connected() ? 'Değişiklikler hemen sunucuya kaydedilir.' : 'Bu ayarlar bildirimler bağlandıktan sonra sunucuya kaydedilir.';
+  }
+  document.querySelectorAll('[data-hours]').forEach((b) => b.addEventListener('click', () => {
+    const a = { ...config.activeHours }; const d = Number(b.dataset.d);
+    if (b.dataset.hours === 'start') a.start = Math.min(a.end, Math.max(5, a.start + d));
+    else a.end = Math.max(a.start, Math.min(23, a.end + d));
+    config = { ...config, activeHours: a }; renderSettings(); renderSchedule(); render(); pushSettings();
+  }));
+  [['t-walk', 'walk'], ['t-water', 'water'], ['t-motivation', 'motivation'], ['t-prayer', 'prayer']].forEach(([id, k]) => $(id).addEventListener('change', () => {
+    config = { ...config, [k]: { ...(config[k] || {}), enabled: $(id).checked } }; renderSchedule(); render(); pushSettings();
+  }));
+  $('t-weekend').addEventListener('change', () => { config = { ...config, skipWeekends: $('t-weekend').checked }; renderSchedule(); render(); pushSettings(); });
+
   async function loadConfig() {
     try {
       const c = await (await fetch('config.json', { cache: 'no-store' })).json();
-      config = { ...config, ...c };
+      config = { ...config, ...c, custom: config.custom || [] };
     } catch (e) { /* varsayılanlar kalır */ }
-    renderSchedule();
+    renderSchedule(); renderSettings();
     const m = config.messages && config.messages.motivation;
     if (m && m.length) $('quote').textContent = pick(m);
     render();
-    // Bağlıysa ve telefondaki hedefler GitHub'dakinden farklıysa sessizce eşitle
-    if (ghToken() && !sameCustom(config.custom, wantedCustom())) syncCustoms(false);
+    refreshFromServer();
   }
 
   // ---------- bildirim kurulumu ----------
   function setPermState() {
-    const keys = store.get(KEYS_STORE, null);
-    const ready = pushSupported && Notification.permission === 'granted' && keys;
-    $('setup-banner').hidden = !!ready;
+    const ready = pushSupported && Notification.permission === 'granted' && connected();
+    $('setup-banner').hidden = ready;
+    $('srv-url').value = srvUrl();
+    $('btn-test').hidden = !ready; $('btn-reset').hidden = !connected();
     if (isIOS && !isStandalone) {
       $('not-installed').hidden = false;
       $('setup-banner').textContent = 'Bildirimler için uygulamayı ana ekrana ekle. Nasıl yapılır? Dokun.';
@@ -600,63 +587,58 @@
       $('perm-state').textContent = 'Bu tarayıcı bildirimleri desteklemiyor (iPhone\'da iOS 16.4+ gerekli).';
       $('btn-enable').disabled = true; $('setup-banner').hidden = true; return;
     }
+    $('setup-banner').textContent = 'Bildirimler henüz bağlanmadı. Kurmak için dokun.';
     const p = Notification.permission;
-    $('perm-state').textContent = p === 'granted' ? (keys ? '✅ Bildirimler açık.' : 'İzin var, anahtar henüz oluşturulmadı.')
-      : p === 'denied' ? '⛔ İzin reddedildi. Ayarlar > Bildirimler > Mola\'dan aç.' : 'Bildirim izni henüz verilmedi.';
-    $('btn-enable').textContent = ready ? 'Anahtarı tekrar göster' : 'Bildirimleri aç';
-  }
-
-  async function getOrCreateKeys() {
-    let keys = store.get(KEYS_STORE, null);
-    if (keys && keys.publicKey && keys.privateKey) return keys;
-    const kp = await crypto.subtle.generateKey({ name: 'ECDSA', namedCurve: 'P-256' }, true, ['sign', 'verify']);
-    keys = { publicKey: b64url(await crypto.subtle.exportKey('raw', kp.publicKey)), privateKey: (await crypto.subtle.exportKey('jwk', kp.privateKey)).d };
-    store.set(KEYS_STORE, keys);
-    return keys;
-  }
-
-  async function subscribe() {
-    const keys = await getOrCreateKeys();
-    let sub = await registration.pushManager.getSubscription();
-    const existing = sub && sub.options && sub.options.applicationServerKey;
-    if (sub && existing && b64url(existing) !== keys.publicKey) { await sub.unsubscribe(); sub = null; }
-    if (!sub) sub = await registration.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: fromB64url(keys.publicKey) });
-    return { publicKey: keys.publicKey, privateKey: keys.privateKey, subscription: sub.toJSON() };
+    $('perm-state').textContent = ready ? '✅ Bildirimler açık ve sunucuya bağlı.'
+      : p === 'denied' ? '⛔ İzin reddedildi. iPhone Ayarlar > Bildirimler > Mola\'dan aç.'
+      : srvUrl() ? 'Sunucu adresi kayıtlı. Bağlanmak için aşağıdaki butona dokun.'
+      : 'Cloudflare\'de oluşturduğun sunucunun adresini yapıştır, sonra bağlan.';
+    $('btn-enable').textContent = ready ? 'Yeniden bağlan' : 'Bağlan ve bildirimleri aç';
   }
 
   $('btn-enable').addEventListener('click', async () => {
-    $('btn-enable').disabled = true;
+    let url = $('srv-url').value.trim().replace(/\/+$/, '');
+    if (url && !/^https?:\/\//.test(url)) url = 'https://' + url;
+    if (!/^https:\/\/[^/]+/.test(url)) { $('perm-state').textContent = 'Önce sunucu adresini yapıştır (https://mola.….workers.dev).'; return; }
+    $('btn-enable').disabled = true; $('perm-state').textContent = 'Bağlanılıyor…';
     try {
+      // İzin isteği dokunuşla tetiklenmeli (iOS kuralı): önce izni iste
       const perm = Notification.permission === 'granted' ? 'granted' : await Notification.requestPermission();
-      if (perm !== 'granted') return;
+      if (perm !== 'granted') throw new Error('Bildirim izni verilmedi.');
+      if (url !== srvUrl()) lsSet(SRV_TOKEN, '');
+      lsSet(SRV_URL, url);
+      const { publicKey } = await (await fetch(url + '/api/vapid', { cache: 'no-store' })).json();
       registration = registration || await navigator.serviceWorker.ready;
-      $('push-config').value = JSON.stringify(await subscribe());
-      $('step-copy').hidden = false;
+      let sub = await registration.pushManager.getSubscription();
+      const existing = sub && sub.options && sub.options.applicationServerKey;
+      if (sub && (!existing || b64url(existing) !== publicKey)) { await sub.unsubscribe(); sub = null; }
+      if (!sub) sub = await registration.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: fromB64url(publicKey) });
+      const site = new URL('./', location.href).href;
+      const data = await api('/api/subscribe', 'POST', { subscription: sub.toJSON(), site, custom: wantedCustom() });
+      lsSet(SRV_TOKEN, data.token);
+      store.del(KEYS_STORE);
+      applyServer(data);
+      toast('Bildirimler bağlandı ✅', false);
     } catch (e) {
-      $('perm-state').textContent = 'Hata: ' + (e && e.message || e);
-    } finally { $('btn-enable').disabled = false; setPermState(); }
-  });
-
-  $('btn-copy').addEventListener('click', async () => {
-    const ta = $('push-config');
-    try { await navigator.clipboard.writeText(ta.value); }
-    catch (e) { ta.focus(); ta.select(); document.execCommand && document.execCommand('copy'); }
-    $('copy-state').textContent = 'Kopyalandı. GitHub\'a yapıştırabilirsin.';
+      $('perm-state').textContent = '⚠️ ' + (e && e.message || e);
+      $('btn-enable').disabled = false; return;
+    }
+    $('btn-enable').disabled = false; setPermState();
   });
 
   $('btn-test').addEventListener('click', async () => {
-    if (!pushSupported || Notification.permission !== 'granted') { alert('Önce bildirim iznini ver.'); return; }
-    registration = registration || await navigator.serviceWorker.ready;
-    registration.showNotification('Mola test 👋', { body: 'Bildirimler bu telefonda çalışıyor.', icon: 'icons/icon-192.png', tag: 'mola-test' });
+    try {
+      const r = await api('/api/test', 'POST');
+      toast(r.sent ? 'Test bildirimi gönderildi 👋' : 'Gönderilemedi. "Yeniden bağlan"a dokun.', false);
+    } catch (e) { toast('Hata: ' + e.message, false); }
   });
 
   $('btn-reset').addEventListener('click', async () => {
-    if (!confirm('Abonelik ve anahtar silinsin mi? Sonra yeni anahtarı GitHub\'a tekrar kaydetmen gerekecek.')) return;
+    if (!confirm('Bu telefonun sunucu bağlantısı kaldırılsın mı? Bildirimler durur, sonra tekrar bağlanabilirsin.')) return;
     registration = registration || await navigator.serviceWorker.ready;
     const sub = await registration.pushManager.getSubscription();
     if (sub) await sub.unsubscribe();
-    store.del(KEYS_STORE);
-    $('push-config').value = ''; $('step-copy').hidden = true;
+    lsSet(SRV_TOKEN, '');
     setPermState();
   });
 

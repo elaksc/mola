@@ -179,30 +179,29 @@
       Bildirimler için uygulamayı ana ekrandan açman gerekiyor: Safari'de <b>Paylaş → Ana Ekrana Ekle</b>.
     </div>
     <p class="muted" id="perm-state">…</p>
-    <button class="pill pill-dark" id="btn-enable">Bildirimleri aç</button>
-    <div id="step-copy" hidden>
-      <p class="small">Bu anahtarı GitHub'da <code>PUSH_CONFIG</code> secret'ı olarak kaydet.</p>
-      <textarea id="push-config" readonly rows="3"></textarea>
-      <button class="pill pill-ghost" id="btn-copy">Anahtarı kopyala</button>
-      <span class="small" id="copy-state"></span>
-    </div>
-    <button class="pill pill-ghost" id="btn-test">Test bildirimi göster</button>
+    <label class="field"><span>Sunucu adresi</span>
+      <input id="srv-url" type="url" inputmode="url" placeholder="https://mola.adın.workers.dev" autocomplete="off" autocapitalize="off" spellcheck="false"></label>
+    <button class="pill pill-dark" id="btn-enable" style="margin-top:10px">Bağlan ve bildirimleri aç</button>
+    <button class="pill pill-ghost" id="btn-test" hidden>Test bildirimi gönder</button>
 
     <h3>Program</h3>
-    <ul class="schedule" id="schedule"></ul>
-    <p class="small">Saatleri değiştirmek için GitHub'da <code>config.json</code> dosyasını düzenle.</p>
-
-    <h3>Hedef bildirimleri</h3>
-    <p class="small" id="gh-state"></p>
-    <div id="gh-form">
-      <label class="field"><span>GitHub erişim anahtarı</span>
-        <input type="password" id="gh-token" placeholder="github_pat_…" autocomplete="off" autocapitalize="off" spellcheck="false"></label>
-      <button class="pill pill-dark" id="gh-save" style="margin-top:10px">Bağlan</button>
+    <div class="stepper">
+      <span>Başlangıç</span>
+      <div><button data-hours="start" data-d="-1" aria-label="Erken">−</button><b id="h-start">09:00</b><button data-hours="start" data-d="1" aria-label="Geç">+</button></div>
     </div>
-    <button class="pill pill-ghost" id="gh-sync" hidden>Şimdi eşitle</button>
-    <button class="link-danger" id="gh-remove" hidden>GitHub bağlantısını kaldır</button>
+    <div class="stepper">
+      <span>Bitiş</span>
+      <div><button data-hours="end" data-d="-1" aria-label="Erken">−</button><b id="h-end">21:59</b><button data-hours="end" data-d="1" aria-label="Geç">+</button></div>
+    </div>
+    <label class="toggle"><span>🚶 Yürüyüş hatırlatması</span><input type="checkbox" id="t-walk"><i></i></label>
+    <label class="toggle"><span>💧 Su hatırlatması</span><input type="checkbox" id="t-water"><i></i></label>
+    <label class="toggle"><span>✨ Motivasyon mesajları</span><input type="checkbox" id="t-motivation"><i></i></label>
+    <label class="toggle"><span>🕌 Namaz vakitleri</span><input type="checkbox" id="t-prayer"><i></i></label>
+    <label class="toggle"><span>Hafta sonu sessiz <small class="small">(namaz hariç)</small></span><input type="checkbox" id="t-weekend"><i></i></label>
+    <p class="small" id="program-note"></p>
+    <ul class="schedule" id="schedule"></ul>
 
-    <button class="link-danger" id="btn-reset">Bildirim aboneliğini sıfırla</button>
+    <button class="link-danger" id="btn-reset" hidden>Bu telefonun bildirim bağlantısını kaldır</button>
   </dialog>
 
   <!-- Hedef düzenleyici -->
